@@ -1,0 +1,410 @@
+---
+title: "Final Part 4"
+author: "Katie Rodeghiero, Arman Siddiqui, Esha Yamani, Kate Miller"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+
+set.seed(1818)
+options(width=70)
+options(scipen=99)
+
+opts_chunk$set(tidy.opts=list(width.wrap=50),tidy=TRUE, size = "vsmall")  
+opts_chunk$set(message = FALSE,                                          
+               warning = FALSE,
+               # "caching" stores objects in code chunks and only rewrites if you change things
+               cache = FALSE,                               
+               # automatically downloads dependency files
+               autodep = TRUE,
+               # 
+               cache.comments = FALSE,
+               # 
+               collapse = TRUE,
+               # change fig.width and fig.height to change the code height and width by default
+               fig.width = 5.5,  
+               fig.height = 4.5,
+               fig.align='center')
+
+
+```
+
+```{r setup-2}
+
+sessionInfo()
+getwd()
+
+```
+
+
+```{r setup-3}
+library('tidyverse')
+library('here')
+library('dplyr')
+library('ggplot2')
+library('forcats')
+library('rsample')
+library('glmnet')
+library('glmnetUtils')
+library('forcats')
+library('broom')
+library('NbClust')
+library('cluster')
+library('ggcorrplot')
+library('partykit')
+library('corrplot')
+library('randomForest')
+library('coefplot')
+library('caret')
+```
+
+Load in data set
+
+```{r}
+satisfaction_full <-
+  read.csv(here::here("datasets", "final_dataset_NA.csv"))
+satisfaction_full = na.omit(satisfaction_full)
+dim(satisfaction_full)
+```
+id: respondent
+area: 0) Seoul 1) NYC 2) Toronto 3) London 4) Paris 5) Berlin 6) Milan 7) Tokyo 8) Beijing 9) Stockholm
+gender:
+age:                        
+--- The following questions were rated on a 1-5 scale of 1 being strongly agree and 5 being strongly disagree
+lots_of_jobs: There are plenty of job opportunities in my city.           
+high_PoL: The price of living in my city is high. 
+good_city_culture: My city allows easy access to culture and leisure facilities.
+places_for_visitors: There are many things in my city that I can proudly introduce to visitors.
+quality_education: I am satisfied with the quality of education in my city.
+public_crisis_support: In times of personal or family crisis, I can turn to the
+city's public institutions and facilities for help.
+good_for_kids: My city is a good place to rear and care for children.
+places_for_disadvantaged: My city has many facilities for the socially disadvantaged people such as the old, the handicapped, and the poor.
+quality_of_healthcare: I am satisfied with the quality of health care in my city.
+safe_at_night: I feel safe walking around the city at night.
+safe_from_accidents: I feel safe from the danger of various accidents such as car accidents, fires, and building collapses.
+safe_drinking_public_water: I feel safe when I drink publicly provided water.
+air_pollution_problem: Air pollution is a serious problem in my city.
+good_public_transport: It is convenient to use public transportation e.g., subways, trains, or buses. in my city.
+nice_close_places: There are many places in my neighborhood or within walking distance from the place that I live, where I can sit and relax, or talk peacefully to neighbors and friends.
+close_groceries: I can easily walk to buy groceries at shops in my neighborhood or within walking distance to the place that I live.
+easy_city_info: It is easy to get information about my city via internet.
+gov_address_citizen_issues: The city government does a good job addressing citizen concerns and requests.
+admin_transparent: The city administration is transparent.
+friends_come_over_lots: I try to have my friends or neighbors come over to my home as frequently as possible. 
+lots_volunteer_activities: There are many opportunities for volunteer activities in my city.
+---
+health_score: How is your health in general? (1-5) very good -> very poor
+city_pride: How proud are you of residing in the city? (1-5) very proud -> not proud
+happy_score: How happy are you now? (1-5) very happy -> very unhappy
+education: Could you please tell me your education level? (1-7) uneducated -> finished college
+household_income: What is the level of your household income? (1-5) low income -> high income
+occupation: Could you please tell me your occupation? (1-11)
+marital_status: Could you please tell me your marital status? (1-5)
+religion: Could you please tell me your religion? (1-8)                
+
+Summary Statistics
+
+```{r}
+summary(satisfaction_full)
+#means, min, max
+
+```
+
+
+Plots of interest using the data
+1. Correlation plots for the data
+first one looks at how different area variables affect the happy score
+second one looks at personal factors and how they affect happy score
+```{r}
+
+mydata <- satisfaction_full[c(5:25)]
+M <-cor(mydata)
+corrplot(M, type="upper", order="hclust")
+
+mydata2 <- satisfaction_full[c(26:33)]
+M2 <-cor(mydata2)
+corrplot(M2, type="upper", order="hclust")
+
+```
+
+2. ggplots to look at the relationships between some of the strongly correlated variables
+```{r}
+
+g <- ggplot(satisfaction_full, aes(happy_score, area, color = area))
+g + geom_violin() + theme_classic() +
+  labs(title="Violin plot of happy_scores as predicted by area", 
+       subtitle="",
+       caption="Source: satisfcation_full",
+       x="happy_score",
+       y="area") + 
+  coord_flip() +
+  stat_summary(fun.y=median, geom="point", size=2, color="red")
+```
+
+Swarmplot showing relationship between happy_score and age
+```{r}
+library(beeswarm)
+
+beeswarm(satisfaction_full$age ~ satisfaction_full$happy_score,
+         pch = 19, 
+         col = c("#442288", "#6CA2EA", "#B5D33D", '#FED23F', '#EB7D5B'), corral = "wrap", title = "Satisfaction Score by age", xlab = "Happy Score", ylab = "Age")
+```
+
+Linear Regression Model
+```{r}
+
+happiness_split <- initial_split(satisfaction_full, prop = 0.75)
+
+happiness_train <- training(happiness_split)
+happiness_test <- testing(happiness_split)
+
+
+mod1 <- lm(happy_score ~ lots_of_jobs + high_PoL + good_city_culture + quality_education + public_crisis_support
+              + good_for_kids + quality_of_healthcare + safe_at_night + safe_from_accidents 
+              + safe_drinking_public_water + air_pollution_problem + good_public_transport 
+              + nice_close_places + close_groceries + easy_city_info + gov_address_citizen_issues 
+              + admin_transparent + friends_come_over_lots + lots_volunteer_activities,
+              data = happiness_train)
+summary(mod1)
+
+
+preds_hap_test = predict(mod1, newdata = happiness_test)
+preds_hap_train = predict(mod1, newdata = happiness_train)
+
+get_rmse <- function(true_values, predictions){
+  sqrt(mean( (exp(true_values) - exp(predictions)) ^2 ) )
+}
+print(get_rmse(happiness_test$happy_score, preds_hap_test))
+print(get_rmse(happiness_train$happy_score, preds_hap_train))
+
+get_mae <- function(true_values, predictions){
+  mean(abs(true_values - predictions))
+}
+print(get_mae(happiness_test$happy_score, preds_hap_test))
+print(get_mae(happiness_train$happy_score, preds_hap_train))
+
+```
+
+Ridge Model
+```{r}
+#Splitting the data into train and test sets.
+satisfaction_score_split <- initial_split(satisfaction_full, prop = 0.75)
+satisfaction_score_train <- training(satisfaction_score_split)
+satisfaction_score_test <- testing(satisfaction_score_split)
+
+#Fit a ridge model using all variables to predict happy_score. 
+satisfaction_ridge_fit <- cv.glmnet(happy_score ~ ., 
+                              data = satisfaction_score_train,
+                              alpha = 0)
+
+#Find lambda.min.
+coef(satisfaction_ridge_fit, 
+     s = satisfaction_ridge_fit$lambda.min) %>% 
+  round(3)
+#Find lambda.1se.
+coef(satisfaction_ridge_fit, 
+     s = satisfaction_ridge_fit$lambda.1se) %>% 
+  round(3)
+
+#Fit to data frame. 
+ridge_coefs <- data.frame(
+  `lasso_min` = coef(satisfaction_ridge_fit, s = satisfaction_ridge_fit$lambda.min) %>% 
+    round(3) %>% as.matrix() %>% as.data.frame(),
+  `lasso_1se` = coef(satisfaction_ridge_fit, s = satisfaction_ridge_fit$lambda.1se) %>% 
+    round(3) %>% as.matrix() %>% as.data.frame()
+) %>% rename(`ridge_min` = 1, `ridge_1se` = 2)
+
+#Plot ridge model. 
+plot(satisfaction_ridge_fit)
+
+print(satisfaction_ridge_fit$lambda.min)
+print(satisfaction_ridge_fit$lambda.1se)
+
+#Get RMSE for train and test sets.
+mod_preds_test = predict(satisfaction_ridge_fit, newdata = satisfaction_score_test)
+mod_preds_train = predict(satisfaction_ridge_fit, newdata = satisfaction_score_train)
+
+get_rmse <- function(true_values, predictions){
+  sqrt(mean( (exp(true_values) - exp(predictions)) ^2 ) )
+}
+get_rmse(satisfaction_score_test$happy_score, mod_preds_test)
+get_rmse(satisfaction_score_train$happy_score, mod_preds_train)
+
+#Get MAE for train and test sets.
+get_mae <- function(true_values, predictions){
+  mean(abs(true_values - predictions))
+}
+get_mae(satisfaction_score_train$happy_score, mod_preds_train)
+get_mae(satisfaction_score_test$happy_score, mod_preds_test)
+
+```
+
+Clustering Good!
+```{r}
+cluster2 <- satisfaction_full[2:33]
+cluster2 <- cluster2 %>% select(9:15, 27)
+
+glimpse(cluster2)
+
+Nb_cl <- NbClust(cluster2,
+        diss = NULL,
+        distance = "euclidean",
+        min.nc = 2,
+        max.nc = 15,
+        method = "kmeans")
+
+Nb_cl$Best.nc[1,]
+
+
+# Estimate k-means with 2 as it is the best number as shown from the nb_clust above!
+kmeans2 = kmeans(cluster2,
+                 centers = 2,
+                 nstart = 25)
+
+# gives us some basic data to look at
+
+kmeans2$centers
+
+fviz_cluster(kmeans2, data = scale(cluster2), 
+             geom = c("point"), ellipse.type = "euclid") + 
+  theme_classic()
+
+```
+
+
+ElasticNet Model
+```{r}
+
+enet_mod <- cva.glmnet(happy_score ~ .,
+                       data = satisfaction_score_train,
+                       alpha = seq(0,1, by = 0.05))
+
+plot(enet_mod)
+
+
+minlossplot(enet_mod, cv.type = "min")
+#Appears that optimal alpha is around 1, meaning that a lasso model would be better to use than a ridge model. 
+```
+
+Clustering Attempt 1 that was informative but not good
+```{r}
+happy_clean = satisfaction_full[2:33]
+
+happy_clean = happy_clean %>% 
+  mutate(gender.fac = as.numeric(fct_lump_n(gender, n = 2)), 
+         area.fac = as.numeric(fct_lump_n(area, n = 10)))
+
+happy_clean = happy_clean[5:34]
+
+lasso_mod = cv.glmnet(happy_score ~ .,
+                       data = happy_clean,
+                       alpha = 1)
+
+print(lasso_mod$lambda.1se)
+
+coef(lasso_mod, 
+     s = lasso_mod$lambda.1se) %>%
+  round(3)
+
+happy_clean <- happy_clean[,c(2, 5, 6, 8, 13, 14, 19, 20, 21, 22, 24, 26, 28, 29)]
+
+# ggcorrplot(round(cor(happy_clean),2),
+#           type = "lower", insig = "blank",
+#           show.diag = TRUE, lab = TRUE,
+#           colors = c("red", "white", "blue"))
+
+# Elbow method
+fviz_nbclust(happy_clean,
+             kmeans,
+             method = "wss") +
+  geom_vline(xintercept = 3,
+             linetype = 2) +
+  labs(subtitle = "Elbow Method")
+
+# Silhouette Method
+fviz_nbclust(happy_clean, kmeans,
+             method = "silhouette") +
+  geom_vline(xintercept = 3,
+             linetype = 2) +
+  labs(subtitle = "Silhouette Method")
+
+# Gap Statistic Method ---> WARNING: THIS TAKES SOME TIME SO DON'T RUN IT!!!
+fviz_nbclust(happy_clean,
+             kmeans,
+             nstart = 25,
+             method = "gap_stat",
+             nboot = 500) +
+  labs(subtitle = "Gap Statistic Method")
+
+```
+
+Regression Tree
+```{r}
+# cleaning and preparing our dataset for our predict if a person is happy or not based on the following:
+# area, gender, age, household_income, education
+rt_cleaned = satisfaction_full
+rt_cleaned = mutate(rt_cleaned, happy = ifelse(happy_score >= mean(rt_cleaned$happy_score), "happy", "unhappy"))
+
+rt_cleaned = rt_cleaned %>% as_tibble() %>%
+  mutate(happy = as.factor(happy),
+         area = as.factor(area),
+         gender = as.factor(gender)) %>%
+  mutate_if(is.character, as.factor)
+
+# ctree to estimate our model
+happy_tree1 = ctree(happy ~ gender + area + age + household_income + education,
+                   data = rt_cleaned)
+
+plot(happy_tree1, gp = gpar(fontsize = 6))
+```
+
+
+Random Forest 
+```{r}
+# a basic random forest tree without tuning mtry
+rf_fit = randomForest(happy ~  
+                        gender + area + age + household_income + education,
+                      data = rt_cleaned,
+                      type = classification,
+                      mtry = 3,
+                      na.action = na.roughfix,
+                      ntree = 300,
+                      importance = TRUE)
+
+# time to tune mtry for out model
+rf_mods = list()
+oob_err = NULL
+test_err = NULL
+for(mtry in 1:9){
+  rf_fit = randomForest(happy ~ 
+                          gender + area + age + household_income + education,
+                        data = rt_cleaned,
+                        mtry = mtry,
+                        na.action = na.roughfix,
+                        ntree = 600)
+  oob_err[mtry] = rf_fit$err.rate[600]
+  
+  cat(mtry, " ")
+}
+
+results_DF = data.frame(mtry = 1:9, oob_err)
+ggplot(results_DF, aes(x = mtry, y = oob_err)) + geom_point() + theme_minimal()
+
+
+rf_fit_tuned = randomForest(happy ~  
+                        gender + area + age + household_income + education,
+                      data = rt_cleaned,
+                      type = classification,
+                      mtry = 2,
+                      na.action = na.roughfix,
+                      ntree = 200,
+                      importance = TRUE)
+
+# red is the unhappy error rate, green is the happy error rate, black is the overall error rate
+plot(rf_fit_tuned)
+```
