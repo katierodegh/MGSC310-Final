@@ -1,5 +1,5 @@
 ---
-title: "Final Part 4"
+title: "Final RMarkdown"
 author: "Katie Rodeghiero, Arman Siddiqui, Esha Yamani, Kate Miller"
 output:
   html_document:
@@ -60,6 +60,7 @@ library('corrplot')
 library('randomForest')
 library('coefplot')
 library('caret')
+library('factoextra')
 ```
 
 Load in data set
@@ -243,40 +244,6 @@ get_mae(satisfaction_score_train$happy_score, mod_preds_train)
 get_mae(satisfaction_score_test$happy_score, mod_preds_test)
 
 ```
-
-Clustering Good!
-```{r}
-cluster2 <- satisfaction_full[2:33]
-cluster2 <- cluster2 %>% select(9:15, 27)
-
-glimpse(cluster2)
-
-Nb_cl <- NbClust(cluster2,
-        diss = NULL,
-        distance = "euclidean",
-        min.nc = 2,
-        max.nc = 15,
-        method = "kmeans")
-
-Nb_cl$Best.nc[1,]
-
-
-# Estimate k-means with 2 as it is the best number as shown from the nb_clust above!
-kmeans2 = kmeans(cluster2,
-                 centers = 2,
-                 nstart = 25)
-
-# gives us some basic data to look at
-
-kmeans2$centers
-
-fviz_cluster(kmeans2, data = scale(cluster2), 
-             geom = c("point"), ellipse.type = "euclid") + 
-  theme_classic()
-
-```
-
-
 ElasticNet Model
 ```{r}
 
@@ -289,66 +256,47 @@ plot(enet_mod)
 
 minlossplot(enet_mod, cv.type = "min")
 #Appears that optimal alpha is around 1, meaning that a lasso model would be better to use than a ridge model. 
-```
+``` 
 
-Clustering Attempt 1 that was informative but not good
+Clustering Good!
 ```{r}
-happy_clean = satisfaction_full[2:33]
+cluster2 <- satisfaction_full[2:33]
+cluster2 <- cluster2 %>% select(9:15, 27)
 
-happy_clean = happy_clean %>% 
-  mutate(gender.fac = as.numeric(fct_lump_n(gender, n = 2)), 
-         area.fac = as.numeric(fct_lump_n(area, n = 10)))
+glimpse(cluster2)
 
-happy_clean = happy_clean[5:34]
+#Nb_cl <- NbClust(cluster2,
+#        diss = NULL,
+#        distance = "euclidean",
+#        min.nc = 2,
+#        max.nc = 15,
+#        method = "kmeans")
 
-lasso_mod = cv.glmnet(happy_score ~ .,
-                       data = happy_clean,
-                       alpha = 1)
+#Nb_cl$Best.nc[1,]
 
-print(lasso_mod$lambda.1se)
 
-coef(lasso_mod, 
-     s = lasso_mod$lambda.1se) %>%
-  round(3)
+# Estimate k-means with 2 as it is the best number as shown from the nb_clust above!
+kmeans2 = kmeans(cluster2,
+                 centers = 2,
+                 nstart = 25)
 
-happy_clean <- happy_clean[,c(2, 5, 6, 8, 13, 14, 19, 20, 21, 22, 24, 26, 28, 29)]
 
-# ggcorrplot(round(cor(happy_clean),2),
-#           type = "lower", insig = "blank",
-#           show.diag = TRUE, lab = TRUE,
-#           colors = c("red", "white", "blue"))
+# gives us some basic data to look at
+kmeans2$centers
 
-# Elbow method
-fviz_nbclust(happy_clean,
-             kmeans,
-             method = "wss") +
-  geom_vline(xintercept = 3,
-             linetype = 2) +
-  labs(subtitle = "Elbow Method")
-
-# Silhouette Method
-fviz_nbclust(happy_clean, kmeans,
-             method = "silhouette") +
-  geom_vline(xintercept = 3,
-             linetype = 2) +
-  labs(subtitle = "Silhouette Method")
-
-# Gap Statistic Method ---> WARNING: THIS TAKES SOME TIME SO DON'T RUN IT!!!
-fviz_nbclust(happy_clean,
-             kmeans,
-             nstart = 25,
-             method = "gap_stat",
-             nboot = 500) +
-  labs(subtitle = "Gap Statistic Method")
+fviz_cluster(kmeans2, data = scale(cluster2), 
+             geom = c("point"), ellipse.type = "euclid") + 
+  theme_classic()
 
 ```
+
 
 Regression Tree
 ```{r}
 # cleaning and preparing our dataset for our predict if a person is happy or not based on the following:
 # area, gender, age, household_income, education
 rt_cleaned = satisfaction_full
-rt_cleaned = mutate(rt_cleaned, happy = ifelse(happy_score >= mean(rt_cleaned$happy_score), "happy", "unhappy"))
+rt_cleaned = mutate(rt_cleaned, happy = ifelse(happy_score >= mean(rt_cleaned$happy_score), "unhappy", "happy"))
 
 rt_cleaned = rt_cleaned %>% as_tibble() %>%
   mutate(happy = as.factor(happy),
